@@ -1,0 +1,259 @@
+"""Tiny DDJ-1000 MIDI VU meter TUI."""
+
+import coremidi
+import ddj1000
+import term
+import vumeter
+
+class Selector:
+    kind: str
+    channel: int
+    data1: int
+    active: bool
+
+    def __init__(self, kind: str="", channel: int=0, data1: int=0, active: bool=False):
+        self.kind = kind
+        self.channel = channel
+        self.data1 = data1
+        self.active = active
+
+    def __str__(self) -> str:
+        if not self.active:
+            return "learn"
+        if self.kind == "cc":
+            return f"cc:{self.channel}:{self.data1}"
+        if self.kind == "note":
+            return f"note:{self.channel}:{self.data1}"
+        if self.kind == "pitch":
+            return f"pitch:{self.channel}"
+        return "unknown"
+
+def usage(prog: str) -> str:
+    return (
+        f"Usage: {prog} [learn|cc:CHANNEL:NUMBER|note:CHANNEL:NOTE|pitch:CHANNEL] [SECONDS]\n"
+        + "\n"
+        + "Default mode is learn: move one supported DDJ-1000 control and the\n"
+        + "meter locks onto it. Pass SECONDS for a bounded smoke test.\n"
+        + "\n"
+        + "Examples:\n"
+        + f"  {prog}\n"
+        + f"  {prog} 10\n"
+        + f"  {prog} cc:1:11\n"
+        + f"  {prog} cc:1:11 10\n"
+    )
+
+def parse_int_arg(text: str, label: str) -> int:
+    try:
+        return int(text)
+    except ValueError:
+        raise ValueError(f"Invalid {label}: {text}")
+
+def parse_channel(text: str) -> int:
+    channel = parse_int_arg(text, "channel")
+    if channel < 1 or channel > 16:
+        raise ValueError(f"Channel must be 1..16, got {channel}")
+    return channel
+
+def parse_7bit(text: str, label: str) -> int:
+    value = parse_int_arg(text, label)
+    if value < 0 or value > 127:
+        raise ValueError(f"{label.capitalize()} must be 0..127, got {value}")
+    return value
+
+def parse_selector(text: str) -> Selector:
+    spec = text.strip().lower()
+    if spec == "" or spec == "learn":
+        return Selector()
+
+    parts = spec.split(":")
+    if len(parts) < 1:
+        raise ValueError(f"Invalid selector: {text}")
+
+    kind = parts[0]
+    if kind == "cc":
+        if len(parts) != 3:
+            raise ValueError("CC selector must be cc:CHANNEL:NUMBER")
+        return Selector("cc", parse_channel(parts[1]), parse_7bit(parts[2], "cc number"), True)
+    if kind == "note":
+        if len(parts) != 3:
+            raise ValueError("Note selector must be note:CHANNEL:NOTE")
+        return Selector("note", parse_channel(parts[1]), parse_7bit(parts[2], "note"), True)
+    if kind == "pitch":
+        if len(parts) != 2:
+            raise ValueError("Pitch selector must be pitch:CHANNEL")
+        return Selector("pitch", parse_channel(parts[1]), 0, True)
+
+    raise ValueError(f"Unknown selector kind: {kind}")
+
+def selector_from_message(message: coremidi.Message) -> Selector:
+    channel = message.channel
+    data1 = message.data1
+
+    if message.kind == "control_change" and channel is not None and data1 is not None:
+        return Selector("cc", channel, data1, True)
+    if (message.kind == "note_on" or message.kind == "note_off") and channel is not None and data1 is not None:
+        return Selector("note", channel, data1, True)
+    if message.kind == "pitch_bend" and channel is not None:
+        return Selector("pitch", channel, 0, True)
+
+    return Selector()
+
+def selector_matches(selector: Selector, message: coremidi.Message) -> bool:
+    if not selector.active:
+        return False
+
+    channel = message.channel
+    data1 = message.data1
+    if channel is None:
+        return False
+
+    if selector.kind == "cc":
+        return message.kind == "control_change" and channel == selector.channel and data1 == selector.data1
+    if selector.kind == "note":
+        return (
+            (message.kind == "note_on" or message.kind == "note_off")
+            and channel == selector.channel
+            and data1 == selector.data1
+        )
+    if selector.kind == "pitch":
+        return message.kind == "pitch_bend" and channel == selector.channel
+
+    return False
+
+def message_value(message: coremidi.Message) -> int:
+    if message.kind == "note_off":
+        return 0
+
+    if message.kind == "control_change" or message.kind == "note_on":
+        data2 = message.data2
+        if data2 is not None:
+            return data2
+        return 0
+
+    if message.kind == "pitch_bend":
+        value = message.value
+        if value is not None:
+            return value
+        return 0
+
+    return 0
+
+def message_max(message: coremidi.Message) -> int:
+    if message.kind == "pitch_bend":
+        return 16383
+    return 127
+
+def message_label(message: coremidi.Message) -> str:
+    channel = str(message.channel) if message.channel is not None else "-"
+    data1 = str(message.data1) if message.data1 is not None else "-"
+    data2 = str(message.data2) if message.data2 is not None else "-"
+    return f"{message.kind} ch={channel} data1={data1} data2={data2} raw={message.raw.hex()}"
+
+actor main(env):
+    var selector = Selector()
+    var listen_seconds = 0.0
+    var level = 0
+    var peak = 0
+    var value = 0
+    var value_max = 127
+    var status = "Move one supported DDJ-1000 control to learn it."
+    var last_message = "-"
+    var controller: ?ddj1000.Controller = None
+
+    prog = env.argv[0] if len(env.argv) > 0 else "vu"
+
+    try:
+        if len(env.argv) > 1:
+            first = env.argv[1]
+            if first == "-h" or first == "--help":
+                print(usage(prog), end="")
+                env.exit(0)
+            elif first.find(":") >= 0 or first.lower() == "learn":
+                selector = parse_selector(first)
+                if len(env.argv) > 2:
+                    listen_seconds = float(env.argv[2])
+            else:
+                listen_seconds = float(first)
+                if len(env.argv) > 2:
+                    raise ValueError("SECONDS-only mode accepts one argument")
+        if len(env.argv) > 3:
+            raise ValueError("Too many arguments")
+    except ValueError as exc:
+        print(str(exc), err=True)
+        print("", err=True)
+        print(usage(prog), err=True, end="")
+        env.exit(2)
+
+    def draw() -> None:
+        selector_text = str(selector)
+        watched = "learning" if not selector.active else f"watching {selector_text}"
+        screen = (
+            term.top
+            + term.clear
+            + f"{term.bold}DDJ-1000 VU meter{term.normal}\n"
+            + f"{watched}\n"
+            + "press q to quit\n"
+            + "\n"
+            + vumeter.braille_bar(level, peak) + " "
+            + vumeter.level_color(level) + f"{str(level).rjust(3)}" + "%" + term.normal + "\n"
+            + f"value {value}/{value_max}   peak {peak}" + "%\n"
+            + "\n"
+            + f"{status}\n"
+            + f"{last_message}\n"
+        )
+        env.stdout_write(screen)
+
+    def finish(code: int) -> None:
+        ctl = controller
+        if ctl is not None:
+            ctl.close()
+        env.stdout_write(term.normal + "\n")
+        env.exit(code)
+
+    def on_key(text: str) -> None:
+        if text == "q" or text == "Q" or text == "\x03":
+            finish(0)
+
+    def on_event(ctrl: ddj1000.Controller, event: coremidi.Event) -> None:
+        if event.is_error():
+            status = f"MIDI error: {event.err}"
+            draw()
+        elif event.is_message():
+            message = event.unwrap()
+            learned = selector_from_message(message)
+            if not selector.active:
+                if learned.active:
+                    selector = learned
+                    status = f"learned {selector}"
+                else:
+                    status = f"ignored unsupported MIDI message: {message.kind}"
+                    last_message = message_label(message)
+                    draw()
+                    return
+
+            if selector_matches(selector, message):
+                value = message_value(message)
+                value_max = message_max(message)
+                level = vumeter.percent(value, value_max)
+                if level > peak:
+                    peak = level
+                else:
+                    peak = max([level, peak - 1])
+                last_message = message_label(message)
+                status = f"input {selector}"
+                draw()
+
+    env.set_stdin(canonical=False)
+    env.set_stdin(echo=False)
+    env.stdin_install(on_key)
+
+    draw()
+    cap = coremidi.CoreMIDICap(env.cap)
+    try:
+        controller = ddj1000.Controller(cap, on_event)
+    except Exception as exc:
+        status = f"Could not open DDJ-1000 MIDI source: {exc}"
+        draw()
+
+    if listen_seconds > 0.0:
+        after listen_seconds: finish(0)

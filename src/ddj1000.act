@@ -1,0 +1,28 @@
+"""Pioneer DDJ-1000 helpers built on top of CoreMIDI."""
+
+import coremidi
+
+DEFAULT_SOURCE = "DDJ-1000"
+
+actor Controller(cap: coremidi.CoreMIDICap,
+                 on_event: action(Controller, coremidi.Event) -> None):
+    """DDJ-1000 MIDI controller actor.
+
+    This currently forwards decoded CoreMIDI messages. Device-specific named
+    controls can be layered here once we have captured the DDJ-1000's messages.
+    """
+    var _input: ?coremidi.Input = None
+    var _callback = on_event
+
+    def _on_event(input: coremidi.Input, event: coremidi.Event) -> None:
+        _callback(self, event)
+
+    action def set_callback(handler: action(Controller, coremidi.Event) -> None) -> None:
+        _callback = handler
+
+    action def close() -> None:
+        input = _input
+        if input is not None:
+            input.close()
+
+    _input = coremidi.Input(cap, _on_event, source_name=DEFAULT_SOURCE)

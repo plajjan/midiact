@@ -1,0 +1,104 @@
+"""Synthetic VU meter demo with no DDJ-1000 or MIDI dependency."""
+
+import term
+import vumeter
+
+TICK_SECONDS = 0.05
+
+def usage(prog: str) -> str:
+    return (
+        f"Usage: {prog} [SECONDS]\n"
+        + "\n"
+        + "Animate the colored braille VU meter from a synthetic signal.\n"
+        + "The default runtime is 12 seconds. Pass 0 to run until q is pressed.\n"
+    )
+
+def clamp_percent(value: int) -> int:
+    if value < 0:
+        return 0
+    if value > 100:
+        return 100
+    return value
+
+def synthetic_level(tick: int) -> int:
+    phase = tick % 120
+    triangle = phase if phase < 60 else 120 - phase
+    level = triangle * 100 // 60
+
+    beat = tick % 32
+    if beat < 4:
+        level = max([level, 78 + beat * 5])
+    elif beat > 26:
+        level = max([level, 68])
+
+    wobble = (tick * 17) % 23
+    level += wobble - 11
+    return clamp_percent(level)
+
+actor main(env):
+    var duration = 12.0
+    var tick = 0
+    var level = 0
+    var peak = 0
+
+    prog = env.argv[0] if len(env.argv) > 0 else "vu_demo"
+
+    try:
+        if len(env.argv) > 1:
+            first = env.argv[1]
+            if first == "-h" or first == "--help":
+                print(usage(prog), end="")
+                env.exit(0)
+            else:
+                duration = float(first)
+                if duration < 0.0:
+                    raise ValueError("SECONDS must be >= 0")
+        if len(env.argv) > 2:
+            raise ValueError("Too many arguments")
+    except ValueError as exc:
+        print(str(exc), err=True)
+        print("", err=True)
+        print(usage(prog), err=True, end="")
+        env.exit(2)
+
+    def draw() -> None:
+        remaining = "until q" if duration == 0.0 else f"{duration}s demo"
+        screen = (
+            term.top
+            + term.clear
+            + f"{term.bold}VU meter demo{term.normal}\n"
+            + "synthetic signal, no DDJ-1000 required\n"
+            + f"{remaining}   press q to quit\n"
+            + "\n"
+            + vumeter.braille_bar(level, peak) + " "
+            + vumeter.level_color(level) + f"{str(level).rjust(3)}" + "%" + term.normal + "\n"
+            + f"sample {tick}   peak {peak}" + "%\n"
+        )
+        env.stdout_write(screen)
+
+    def finish(code: int) -> None:
+        env.stdout_write(term.normal + "\n")
+        env.exit(code)
+
+    def on_key(text: str) -> None:
+        if text == "q" or text == "Q" or text == "\x03":
+            finish(0)
+
+    def pulse() -> None:
+        tick += 1
+        level = synthetic_level(tick)
+        if level > peak:
+            peak = level
+        else:
+            peak = max([level, peak - 2])
+        draw()
+        after TICK_SECONDS: pulse()
+
+    env.set_stdin(canonical=False)
+    env.set_stdin(echo=False)
+    env.stdin_install(on_key)
+
+    draw()
+    pulse()
+    if duration > 0.0:
+        after duration: finish(0)

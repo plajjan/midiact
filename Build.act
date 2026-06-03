@@ -1,0 +1,9 @@
+name = "midi"
+fingerprint = 0x9af177320c00b78a
+dependencies = {
+  "textfsm": (
+        repo_url="https://github.com/actonlang/textfsm",
+        url="https://github.com/actonlang/textfsm/archive/05f3d47fa774a3a03997a3d5d0fbf81ac865e692.zip",
+        hash="N-V-__8AANTSAABSVwqcmUgmRBR2pi4dErFnnr_TlPIYOj-X"
+    )
+}

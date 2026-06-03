@@ -1,0 +1,26 @@
+import coremidi
+import ddj1000
+
+actor main(env):
+    cap = coremidi.CoreMIDICap(env.cap)
+    listen_seconds = 0.0
+    if len(env.argv) > 1:
+        listen_seconds = float(env.argv[1])
+
+    print("MIDI sources:")
+    for source in coremidi.sources(cap):
+        print(" ", source)
+
+    print("MIDI destinations:")
+    for destination in coremidi.destinations(cap):
+        print(" ", destination)
+
+    def on_event(controller: ddj1000.Controller, event: coremidi.Event) -> None:
+        if event.is_error():
+            print("MIDI error:", event.err)
+        elif event.is_message():
+            print(event.unwrap())
+
+    controller = ddj1000.Controller(cap, on_event)
+    if listen_seconds > 0.0:
+        after listen_seconds: env.exit(0)

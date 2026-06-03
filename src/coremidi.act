@@ -1,0 +1,187 @@
+"""CoreMIDI bindings for macOS MIDI devices."""
+
+class CoreMIDICap():
+    """Capability to access CoreMIDI devices."""
+
+    def __init__(self, cap: WorldCap):
+        pass
+
+class Endpoint:
+    index: int
+    name: str
+    ref: int
+
+    def __init__(self, index: int, name: str, ref: int):
+        self.index = index
+        self.name = name
+        self.ref = ref
+
+    def __str__(self) -> str:
+        return f"[{self.index}] {self.name} endpoint={self.ref}"
+
+class Message:
+    timestamp: int
+    raw: bytes
+    kind: str
+    status: int
+    channel: ?int
+    data1: ?int
+    data2: ?int
+    value: ?int
+
+    def __init__(self, timestamp: int, raw: bytes, kind: str, status: int,
+                 channel: ?int=None, data1: ?int=None, data2: ?int=None,
+                 value: ?int=None):
+        self.timestamp = timestamp
+        self.raw = raw
+        self.kind = kind
+        self.status = status
+        self.channel = channel
+        self.data1 = data1
+        self.data2 = data2
+        self.value = value
+
+    def __str__(self) -> str:
+        channel = f" ch={self.channel}" if self.channel is not None else ""
+        data1 = f" data1={self.data1}" if self.data1 is not None else ""
+        data2 = f" data2={self.data2}" if self.data2 is not None else ""
+        value = f" value={self.value}" if self.value is not None else ""
+        return f"{self.kind}{channel}{data1}{data2}{value} raw={self.raw.hex()}"
+
+class Event:
+    err: ?Exception
+    message: ?Message
+
+    def __init__(self, err: ?Exception=None, message: ?Message=None):
+        self.err = err
+        self.message = message
+
+    def is_error(self) -> bool:
+        return self.err is not None
+
+    def is_message(self) -> bool:
+        return self.err is None and self.message is not None
+
+    def unwrap(self) -> Message:
+        err = self.err
+        if err is not None:
+            raise err
+        message = self.message
+        if isinstance(message, Message):
+            return message
+        raise RuntimeError("CoreMIDI event has neither error nor message")
+
+    def __str__(self) -> str:
+        if self.err is not None:
+            return str(self.err)
+        if self.message is not None:
+            return str(self.message)
+        return "empty CoreMIDI event"
+
+def _sources_raw() -> list[(int, str, int)]:
+    NotImplemented
+
+def _destinations_raw() -> list[(int, str, int)]:
+    NotImplemented
+
+def sources(cap: CoreMIDICap) -> list[Endpoint]:
+    """Return CoreMIDI input sources."""
+    endpoints: list[Endpoint] = []
+    for index, name, ref in _sources_raw():
+        endpoints.append(Endpoint(index, name, ref))
+    return endpoints
+
+def destinations(cap: CoreMIDICap) -> list[Endpoint]:
+    """Return CoreMIDI output destinations."""
+    endpoints: list[Endpoint] = []
+    for index, name, ref in _destinations_raw():
+        endpoints.append(Endpoint(index, name, ref))
+    return endpoints
+
+def find_source(cap: CoreMIDICap, name: str="DDJ-1000") -> Endpoint:
+    matches: list[Endpoint] = []
+    wanted = name.lower()
+
+    for endpoint in sources(cap):
+        if endpoint.name.lower().find(wanted) >= 0:
+            matches.append(endpoint)
+
+    n_matches = len(matches)
+    if n_matches > 0 and n_matches < 2:
+        return matches[0]
+    if n_matches < 1:
+        raise ValueError(f"No CoreMIDI source contains {name}")
+    raise ValueError(f"CoreMIDI source selector is ambiguous: {name}")
+
+def message_from_raw(timestamp: int, raw: bytes) -> Message:
+    if len(raw) < 1:
+        return Message(timestamp, raw, "empty", 0)
+
+    status = int(raw[0])
+    if status < 0x80:
+        return Message(timestamp, raw, "data_byte", status)
+
+    high = status & 0xf0
+    channel = (status & 0x0f) + 1
+    data1: ?int = None
+    data2: ?int = None
+
+    if len(raw) > 1:
+        data1 = int(raw[1])
+    if len(raw) > 2:
+        data2 = int(raw[2])
+
+    if high == 0x80 and data1 is not None and data2 is not None:
+        return Message(timestamp, raw, "note_off", status, channel, data1, data2)
+    if high == 0x90 and data1 is not None and data2 is not None:
+        if data2 < 1:
+            return Message(timestamp, raw, "note_off", status, channel, data1, data2)
+        return Message(timestamp, raw, "note_on", status, channel, data1, data2)
+    if high == 0xa0 and data1 is not None and data2 is not None:
+        return Message(timestamp, raw, "poly_aftertouch", status, channel, data1, data2)
+    if high == 0xb0 and data1 is not None and data2 is not None:
+        return Message(timestamp, raw, "control_change", status, channel, data1, data2)
+    if high == 0xc0 and data1 is not None:
+        return Message(timestamp, raw, "program_change", status, channel, data1)
+    if high == 0xd0 and data1 is not None:
+        return Message(timestamp, raw, "channel_pressure", status, channel, data1)
+    if high == 0xe0 and data1 is not None and data2 is not None:
+        value = data1 | (data2 << 7)
+        return Message(timestamp, raw, "pitch_bend", status, channel, data1, data2, value)
+    if status > 0xef and status < 0xf1:
+        return Message(timestamp, raw, "sysex_or_fragment", status)
+
+    return Message(timestamp, raw, "system_or_unknown", status)
+
+actor Input(cap: CoreMIDICap,
+            on_event: action(Input, Event) -> None,
+            source: ?Endpoint=None,
+            source_name: str="DDJ-1000"):
+    """CoreMIDI input actor.
+
+    The callback receives an Event carrying either an exception or a decoded
+    MIDI message. The raw bytes are kept on Message so higher layers can
+    implement device-specific mappings.
+    """
+    var _handle = 0
+    var _closed = False
+    var _callback = on_event
+
+    proc def _open(source_ref: int) -> None:
+        NotImplemented
+
+    action def close() -> None:
+        NotImplemented
+
+    action def set_callback(handler: action(Input, Event) -> None) -> None:
+        _callback = handler
+
+    action def _on_packet(timestamp: int, raw: bytes) -> None:
+        msg = message_from_raw(timestamp, raw)
+        _callback(self, Event(message=msg))
+
+    action def _on_error(message: str) -> None:
+        _callback(self, Event(err=Exception(message)))
+
+    selected = source if source is not None else find_source(cap, source_name)
+    _open(selected.ref)
