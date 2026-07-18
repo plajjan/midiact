@@ -117,7 +117,7 @@ def message_from_raw(timestamp: int, raw: bytes) -> Message:
     if len(raw) < 1:
         return Message(timestamp, raw, "empty", 0)
 
-    status = int(raw[0])
+    status = raw[0]
     if status < 0x80:
         return Message(timestamp, raw, "data_byte", status)
 
@@ -127,9 +127,9 @@ def message_from_raw(timestamp: int, raw: bytes) -> Message:
     data2: ?int = None
 
     if len(raw) > 1:
-        data1 = int(raw[1])
+        data1 = raw[1]
     if len(raw) > 2:
-        data2 = int(raw[2])
+        data2 = raw[2]
 
     if high == 0x80 and data1 is not None and data2 is not None:
         return Message(timestamp, raw, "note_off", status, channel, data1, data2)

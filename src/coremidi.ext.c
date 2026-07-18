@@ -8,7 +8,7 @@
 
 uv_loop_t *get_uv_loop(void);
 
-void coremidiQ___ext_init__() {
+void midiQ_coremidiQ___ext_init__() {
     // NOP
 }
 
@@ -214,11 +214,11 @@ static B_list endpoint_list(int sources) {
     return res;
 }
 
-B_list coremidiQ__sources_raw() {
+B_list midiQ_coremidiQ__sources_raw() {
     return endpoint_list(1);
 }
 
-B_list coremidiQ__destinations_raw() {
+B_list midiQ_coremidiQ__destinations_raw() {
     return endpoint_list(0);
 }
 
@@ -237,7 +237,7 @@ struct coremidi_event {
 };
 
 struct coremidi_input_handle {
-    coremidiQ_Input self;
+    midiQ_coremidiQ_Input self;
     MIDIClientRef client;
     MIDIPortRef port;
     MIDIEndpointRef source;
@@ -387,7 +387,7 @@ static void async_delivery(uv_async_t *async) {
         struct coremidi_event *next = event->next;
         if (event->type == COREMIDI_EVENT_PACKET) {
             B_bytes raw = actBytesFromCStringLength((char *)event->data, event->length);
-            handle->self->$class->_on_packet(handle->self, toB_int((int64_t)event->timestamp), raw);
+            handle->self->$class->_on_packet(handle->self, (int64_t)event->timestamp, raw);
         } else {
             handle->self->$class->_on_error(handle->self, to$str(event->message));
         }
@@ -399,26 +399,26 @@ static void async_delivery(uv_async_t *async) {
     }
 }
 
-static void report_open_error(coremidiQ_Input self, const char *context, OSStatus status) {
+static void report_open_error(midiQ_coremidiQ_Input self, const char *context, OSStatus status) {
     char msg[160];
     snprintf(msg, sizeof(msg), "%s failed with CoreMIDI OSStatus %d", context, (int)status);
     self->$class->_on_error(self, to$str(msg));
 }
 
-$R coremidiQ_InputD__openG_local(coremidiQ_Input self, $Cont C_cont, B_int source_ref) {
+$R midiQ_coremidiQ_InputD__openG_local(midiQ_coremidiQ_Input self, $Cont C_cont, int64_t source_ref) {
     pin_actor_affinity();
 
     if (!coremidi_load()) {
         self->$class->_on_error(self, to$str(cm.error));
         return $R_CONT(C_cont, B_None);
     }
-    if (fromB_int(self->_handle) != 0) {
+    if (self->_handle != 0) {
         return $R_CONT(C_cont, B_None);
     }
 
     struct coremidi_input_handle *handle = calloc(1, sizeof(struct coremidi_input_handle));
     handle->self = self;
-    handle->source = (MIDIEndpointRef)fromB_int(source_ref);
+    handle->source = (MIDIEndpointRef)source_ref;
     uv_mutex_init(&handle->mutex);
     uv_async_init(get_uv_loop(), &handle->async, async_delivery);
     handle->async.data = handle;
@@ -460,14 +460,14 @@ $R coremidiQ_InputD__openG_local(coremidiQ_Input self, $Cont C_cont, B_int sourc
         return $R_CONT(C_cont, B_None);
     }
 
-    self->_handle = toB_int((int64_t)(intptr_t)handle);
-    self->_closed = B_False;
+    self->_handle = (int64_t)(intptr_t)handle;
+    self->_closed = false;
     return $R_CONT(C_cont, B_None);
 }
 
-$R coremidiQ_InputD_closeG_local(coremidiQ_Input self, $Cont C_cont) {
+$R midiQ_coremidiQ_InputD_closeG_local(midiQ_coremidiQ_Input self, $Cont C_cont) {
     struct coremidi_input_handle *handle =
-        (struct coremidi_input_handle *)(intptr_t)fromB_int(self->_handle);
+        (struct coremidi_input_handle *)(intptr_t)self->_handle;
     if (!handle) {
         return $R_CONT(C_cont, B_None);
     }
@@ -483,30 +483,30 @@ $R coremidiQ_InputD_closeG_local(coremidiQ_Input self, $Cont C_cont) {
         uv_close((uv_handle_t *)&handle->async, NULL);
     }
 
-    self->_handle = toB_int(0);
-    self->_closed = B_True;
+    self->_handle = 0;
+    self->_closed = true;
     return $R_CONT(C_cont, B_None);
 }
 
 #else
 
-B_list coremidiQ__sources_raw() {
+B_list midiQ_coremidiQ__sources_raw() {
     return B_mk_list(0);
 }
 
-B_list coremidiQ__destinations_raw() {
+B_list midiQ_coremidiQ__destinations_raw() {
     return B_mk_list(0);
 }
 
-$R coremidiQ_InputD__openG_local(coremidiQ_Input self, $Cont C_cont, B_int source_ref) {
+$R midiQ_coremidiQ_InputD__openG_local(midiQ_coremidiQ_Input self, $Cont C_cont, int64_t source_ref) {
     (void)source_ref;
     self->$class->_on_error(self, to$str("CoreMIDI is only available on macOS"));
     return $R_CONT(C_cont, B_None);
 }
 
-$R coremidiQ_InputD_closeG_local(coremidiQ_Input self, $Cont C_cont) {
-    self->_handle = toB_int(0);
-    self->_closed = B_True;
+$R midiQ_coremidiQ_InputD_closeG_local(midiQ_coremidiQ_Input self, $Cont C_cont) {
+    self->_handle = 0;
+    self->_closed = true;
     return $R_CONT(C_cont, B_None);
 }
 
