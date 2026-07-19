@@ -1,26 +1,43 @@
-import coremidi
-import ddj1000
+import midi
 
 actor main(env):
-    cap = coremidi.CoreMIDICap(env.cap)
+    cap = midi.MidiCap(env.cap)
+
     listen_seconds = 0.0
     if len(env.argv) > 1:
         listen_seconds = float(env.argv[1])
 
+    # Optional substring to pick a specific input; otherwise the first source.
+    name: ?str = None
+    if len(env.argv) > 2:
+        name = env.argv[2]
+
+    sources = midi.sources(cap)
     print("MIDI sources:")
-    for source in coremidi.sources(cap):
+    for source in sources:
         print(" ", source)
 
     print("MIDI destinations:")
-    for destination in coremidi.destinations(cap):
+    for destination in midi.destinations(cap):
         print(" ", destination)
 
-    def on_event(controller: ddj1000.Controller, event: coremidi.Event) -> None:
+    def on_event(input: midi.Input, event: midi.Event) -> None:
         if event.is_error():
             print("MIDI error:", event.err)
         elif event.is_message():
             print(event.unwrap())
 
-    controller = ddj1000.Controller(cap, on_event)
-    if listen_seconds > 0.0:
-        after listen_seconds: env.exit(0)
+    selected: ?midi.Endpoint = None
+    if name is not None:
+        selected = midi.find_source(cap, name)
+    elif len(sources) > 0:
+        selected = sources[0]
+
+    if selected is None:
+        print("No MIDI source available")
+        env.exit(1)
+    else:
+        print("Opening:", selected)
+        input = midi.Input(cap, on_event, source=selected)
+        if listen_seconds > 0.0:
+            after listen_seconds: env.exit(0)

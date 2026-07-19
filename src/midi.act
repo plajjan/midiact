@@ -1,7 +1,7 @@
-"""CoreMIDI bindings for macOS MIDI devices."""
+"""Cross-platform MIDI bindings via RtMidi (CoreMIDI on macOS, ALSA on Linux)."""
 
-class CoreMIDICap():
-    """Capability to access CoreMIDI devices."""
+class MidiCap():
+    """Capability to access MIDI devices."""
 
     def __init__(self, cap: WorldCap):
         pass
@@ -69,14 +69,14 @@ class Event:
         message = self.message
         if isinstance(message, Message):
             return message
-        raise RuntimeError("CoreMIDI event has neither error nor message")
+        raise RuntimeError("MIDI event has neither error nor message")
 
     def __str__(self) -> str:
         if self.err is not None:
             return str(self.err)
         if self.message is not None:
             return str(self.message)
-        return "empty CoreMIDI event"
+        return "empty MIDI event"
 
 def _sources_raw() -> list[(int, str, int)]:
     NotImplemented
@@ -84,21 +84,21 @@ def _sources_raw() -> list[(int, str, int)]:
 def _destinations_raw() -> list[(int, str, int)]:
     NotImplemented
 
-def sources(cap: CoreMIDICap) -> list[Endpoint]:
-    """Return CoreMIDI input sources."""
+def sources(cap: MidiCap) -> list[Endpoint]:
+    """Return MIDI input sources."""
     endpoints: list[Endpoint] = []
     for index, name, ref in _sources_raw():
         endpoints.append(Endpoint(index, name, ref))
     return endpoints
 
-def destinations(cap: CoreMIDICap) -> list[Endpoint]:
-    """Return CoreMIDI output destinations."""
+def destinations(cap: MidiCap) -> list[Endpoint]:
+    """Return MIDI output destinations."""
     endpoints: list[Endpoint] = []
     for index, name, ref in _destinations_raw():
         endpoints.append(Endpoint(index, name, ref))
     return endpoints
 
-def find_source(cap: CoreMIDICap, name: str="DDJ-1000") -> Endpoint:
+def find_source(cap: MidiCap, name: str="DDJ-1000") -> Endpoint:
     matches: list[Endpoint] = []
     wanted = name.lower()
 
@@ -110,8 +110,8 @@ def find_source(cap: CoreMIDICap, name: str="DDJ-1000") -> Endpoint:
     if n_matches > 0 and n_matches < 2:
         return matches[0]
     if n_matches < 1:
-        raise ValueError(f"No CoreMIDI source contains {name}")
-    raise ValueError(f"CoreMIDI source selector is ambiguous: {name}")
+        raise ValueError(f"No MIDI source contains {name}")
+    raise ValueError(f"MIDI source selector is ambiguous: {name}")
 
 def message_from_raw(timestamp: int, raw: bytes) -> Message:
     if len(raw) < 1:
@@ -153,11 +153,11 @@ def message_from_raw(timestamp: int, raw: bytes) -> Message:
 
     return Message(timestamp, raw, "system_or_unknown", status)
 
-actor Input(cap: CoreMIDICap,
+actor Input(cap: MidiCap,
             on_event: action(Input, Event) -> None,
             source: ?Endpoint=None,
             source_name: str="DDJ-1000"):
-    """CoreMIDI input actor.
+    """MIDI input actor.
 
     The callback receives an Event carrying either an exception or a decoded
     MIDI message. The raw bytes are kept on Message so higher layers can

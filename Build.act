@@ -7,3 +7,9 @@ dependencies = {
         hash="N-V-__8AANTSAABSVwqcmUgmRBR2pi4dErFnnr_TlPIYOj-X"
     )
 }
+zig_dependencies = {
+  "rtmidi": (
+        path="deps/rtmidi",
+        artifacts=["rtmidi"]
+    )
+}

@@ -1,0 +1,19 @@
+.{
+    .name = .asound,
+    .version = "1.2.14",
+    .fingerprint = 0x4cc649c5f8e09dac,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .alsa_upstream = .{
+            .url = "https://github.com/alsa-project/alsa-lib/archive/refs/tags/v1.2.14.tar.gz",
+            .hash = "N-V-__8AACPMQgBfqlZq9Kx2qUwCMrZVkl-5dDd5bVDiF06E",
+            .lazy = false,
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "include",
+        "zig-seq-link-test.c",
+    },
+}

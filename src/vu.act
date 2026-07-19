@@ -1,6 +1,6 @@
 """Tiny DDJ-1000 MIDI VU meter TUI."""
 
-import coremidi
+import midi
 import ddj1000
 import term
 import vumeter
@@ -85,7 +85,7 @@ def parse_selector(text: str) -> Selector:
 
     raise ValueError(f"Unknown selector kind: {kind}")
 
-def selector_from_message(message: coremidi.Message) -> Selector:
+def selector_from_message(message: midi.Message) -> Selector:
     channel = message.channel
     data1 = message.data1
 
@@ -98,7 +98,7 @@ def selector_from_message(message: coremidi.Message) -> Selector:
 
     return Selector()
 
-def selector_matches(selector: Selector, message: coremidi.Message) -> bool:
+def selector_matches(selector: Selector, message: midi.Message) -> bool:
     if not selector.active:
         return False
 
@@ -120,7 +120,7 @@ def selector_matches(selector: Selector, message: coremidi.Message) -> bool:
 
     return False
 
-def message_value(message: coremidi.Message) -> int:
+def message_value(message: midi.Message) -> int:
     if message.kind == "note_off":
         return 0
 
@@ -138,12 +138,12 @@ def message_value(message: coremidi.Message) -> int:
 
     return 0
 
-def message_max(message: coremidi.Message) -> int:
+def message_max(message: midi.Message) -> int:
     if message.kind == "pitch_bend":
         return 16383
     return 127
 
-def message_label(message: coremidi.Message) -> str:
+def message_label(message: midi.Message) -> str:
     channel = str(message.channel) if message.channel is not None else "-"
     data1 = str(message.data1) if message.data1 is not None else "-"
     data2 = str(message.data2) if message.data2 is not None else "-"
@@ -214,7 +214,7 @@ actor main(env):
         if text == "q" or text == "Q" or text == "\x03":
             finish(0)
 
-    def on_event(ctrl: ddj1000.Controller, event: coremidi.Event) -> None:
+    def on_event(ctrl: ddj1000.Controller, event: midi.Event) -> None:
         if event.is_error():
             status = f"MIDI error: {event.err}"
             draw()
@@ -248,7 +248,7 @@ actor main(env):
     env.stdin_install(on_key)
 
     draw()
-    cap = coremidi.CoreMIDICap(env.cap)
+    cap = midi.MidiCap(env.cap)
     try:
         controller = ddj1000.Controller(cap, on_event)
     except Exception as exc:

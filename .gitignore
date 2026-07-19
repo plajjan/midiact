@@ -1,0 +1,14 @@
+.build
+build.zig*
+!deps/rtmidi/build.zig
+!deps/rtmidi/build.zig.zon
+!deps/alsa/build.zig
+!deps/alsa/build.zig.zon
+.acton.lock
+.actonc.lock
+.acton.compile.lock
+.zig-cache
+zig-cache
+out
+zig-pkg
+zig-out
