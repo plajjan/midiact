@@ -267,3 +267,71 @@ $R midiQ_midiQ_InputD_closeG_local(midiQ_midiQ_Input self, $Cont C_cont) {
     self->_closed = true;
     return $R_CONT(C_cont, B_None);
 }
+
+// ---------------------------------------------------------------------------
+// Output actor
+//
+// A thin wrapper over an RtMidi output port. Unlike input there is no
+// callback thread: send3() runs on the actor's own (affinity-pinned) thread
+// and hands the bytes straight to rtmidi_out_send_message.
+// ---------------------------------------------------------------------------
+
+struct rtmidi_output_handle {
+    RtMidiOutPtr out;
+};
+
+$R midiQ_midiQ_OutputD__openG_local(midiQ_midiQ_Output self, $Cont C_cont, int64_t dest_ref) {
+    pin_actor_affinity();
+
+    if (self->_handle != 0) {
+        return $R_CONT(C_cont, B_None);
+    }
+
+    RtMidiOutPtr out = rtmidi_out_create_default();
+    if (!out || !out->ok) {
+        if (out) rtmidi_out_free(out);
+        return $R_CONT(C_cont, B_None);
+    }
+
+    rtmidi_open_port((RtMidiPtr)out, (unsigned int)dest_ref, "acton midi output");
+    if (!out->ok) {
+        rtmidi_out_free(out);
+        return $R_CONT(C_cont, B_None);
+    }
+
+    struct rtmidi_output_handle *handle = calloc(1, sizeof(struct rtmidi_output_handle));
+    handle->out = out;
+    self->_handle = (int64_t)(intptr_t)handle;
+    self->_closed = false;
+    return $R_CONT(C_cont, B_None);
+}
+
+$R midiQ_midiQ_OutputD_send3G_local(midiQ_midiQ_Output self, $Cont C_cont,
+                                    int64_t status, int64_t data1, int64_t data2) {
+    struct rtmidi_output_handle *handle =
+        (struct rtmidi_output_handle *)(intptr_t)self->_handle;
+    if (handle && handle->out) {
+        unsigned char msg[3] = {
+            (unsigned char)(status & 0xff),
+            (unsigned char)(data1 & 0x7f),
+            (unsigned char)(data2 & 0x7f),
+        };
+        rtmidi_out_send_message(handle->out, msg, 3);
+    }
+    return $R_CONT(C_cont, B_None);
+}
+
+$R midiQ_midiQ_OutputD_closeG_local(midiQ_midiQ_Output self, $Cont C_cont) {
+    struct rtmidi_output_handle *handle =
+        (struct rtmidi_output_handle *)(intptr_t)self->_handle;
+    if (handle) {
+        if (handle->out) {
+            rtmidi_close_port((RtMidiPtr)handle->out);
+            rtmidi_out_free(handle->out);
+        }
+        free(handle);
+    }
+    self->_handle = 0;
+    self->_closed = true;
+    return $R_CONT(C_cont, B_None);
+}

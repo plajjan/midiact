@@ -113,6 +113,21 @@ def find_source(cap: MidiCap, name: str="DDJ-1000") -> Endpoint:
         raise ValueError(f"No MIDI source contains {name}")
     raise ValueError(f"MIDI source selector is ambiguous: {name}")
 
+def find_destination(cap: MidiCap, name: str="Launchkey") -> Endpoint:
+    matches: list[Endpoint] = []
+    wanted = name.lower()
+
+    for endpoint in destinations(cap):
+        if endpoint.name.lower().find(wanted) >= 0:
+            matches.append(endpoint)
+
+    n_matches = len(matches)
+    if n_matches > 0 and n_matches < 2:
+        return matches[0]
+    if n_matches < 1:
+        raise ValueError(f"No MIDI destination contains {name}")
+    raise ValueError(f"MIDI destination selector is ambiguous: {name}")
+
 def message_from_raw(timestamp: int, raw: bytes) -> Message:
     if len(raw) < 1:
         return Message(timestamp, raw, "empty", 0)
@@ -185,3 +200,39 @@ actor Input(cap: MidiCap,
 
     selected = source if source is not None else find_source(cap, source_name)
     _open(selected.ref)
+
+actor Output(cap: MidiCap,
+             on_open: ?action(Output, bool) -> None=None,
+             dest: ?Endpoint=None,
+             dest_name: str="Launchkey"):
+    """MIDI output actor.
+
+    Opens a single MIDI destination and sends short channel-voice messages.
+    Used to drive controller LEDs (e.g. the Launchkey Session pads): send a
+    note-on with a velocity that indexes the controller's colour palette.
+
+    When provided, on_open is called once after the open attempt with True on
+    success, False otherwise.
+    """
+    var _handle = 0
+    var _closed = False
+
+    proc def _open(dest_ref: int) -> None:
+        NotImplemented
+
+    action def send3(status: int, data1: int, data2: int) -> None:
+        """Send one 3-byte channel-voice message (status, data1, data2)."""
+        NotImplemented
+
+    action def note_on(channel: int, note: int, velocity: int) -> None:
+        """Note-on on a 0-indexed channel (0..15). velocity 0 == note-off."""
+        send3(0x90 | (channel & 0x0f), note & 0x7f, velocity & 0x7f)
+
+    action def close() -> None:
+        NotImplemented
+
+    selected = dest if dest is not None else find_destination(cap, dest_name)
+    _open(selected.ref)
+    cb = on_open
+    if cb is not None:
+        cb(self, _handle != 0)

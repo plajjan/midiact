@@ -7,8 +7,9 @@ Linux, WinMM on Windows.
 
 The package is split into two layers:
 
-- `midi`: a small RtMidi binding with endpoint discovery and an input actor
-  that emits decoded MIDI messages.
+- `midi`: a small RtMidi binding with endpoint discovery, an input actor that
+  emits decoded MIDI messages, and an output actor for sending short
+  channel-voice messages (e.g. note-ons to drive a controller's LEDs).
 - `ddj1000`: a controller-facing wrapper that currently forwards MIDI messages
   and is intended to grow a named DDJ-1000 control map.
 
