@@ -209,7 +209,9 @@ actor Output(cap: MidiCap,
 
     Opens a single MIDI destination and sends short channel-voice messages.
     Used to drive controller LEDs (e.g. the Launchkey Session pads): send a
-    note-on with a velocity that indexes the controller's colour palette.
+    note-on with a velocity that indexes the controller's colour palette. Also
+    drives a synthesizer: select an instrument with program_change, then play
+    it with note_on.
 
     When provided, on_open is called once after the open attempt with True on
     success, False otherwise.
@@ -224,9 +226,17 @@ actor Output(cap: MidiCap,
         """Send one 3-byte channel-voice message (status, data1, data2)."""
         NotImplemented
 
+    action def send2(status: int, data1: int) -> None:
+        """Send one 2-byte channel-voice message (status, data1)."""
+        NotImplemented
+
     action def note_on(channel: int, note: int, velocity: int) -> None:
         """Note-on on a 0-indexed channel (0..15). velocity 0 == note-off."""
         send3(0x90 | (channel & 0x0f), note & 0x7f, velocity & 0x7f)
+
+    action def program_change(channel: int, program: int) -> None:
+        """Select program (instrument) `program` on a 0-indexed channel (0..15)."""
+        send2(0xc0 | (channel & 0x0f), program & 0x7f)
 
     action def close() -> None:
         NotImplemented

@@ -8,8 +8,10 @@ Linux, WinMM on Windows.
 The package is split into two layers:
 
 - `midi`: a small RtMidi binding with endpoint discovery, an input actor that
-  emits decoded MIDI messages, and an output actor for sending short
-  channel-voice messages (e.g. note-ons to drive a controller's LEDs).
+  emits decoded MIDI messages, and an output actor that sends short
+  channel-voice messages. The output actor drives a controller's LEDs with
+  note-ons. It also plays a synthesizer: select an instrument with
+  `program_change`, then play notes with `note_on`.
 - `ddj1000`: a controller-facing wrapper that currently forwards MIDI messages
   and is intended to grow a named DDJ-1000 control map.
 
@@ -111,6 +113,18 @@ actor main(env):
             print(message.kind, message.channel, message.data1, message.data2)
 
     controller = ddj1000.Controller(cap, on_event)
+```
+
+Output uses the same capability. `send3` sends a 3-byte channel-voice message
+and `send2` sends a 2-byte one. Program change and channel pressure carry one
+data byte, so they need `send2`. A third byte on the wire is a data byte under
+running status, and the receiver reads it as a second message.
+
+```acton
+    out = midi.Output(cap, dest_name="FLUID")
+    out.program_change(0, 89)   # GM "Pad 2 (warm)" on channel 1
+    out.note_on(0, 60, 64)      # middle C
+    out.note_on(0, 60, 0)       # velocity 0 == note-off
 ```
 
 `midi.Message.raw` keeps the original MIDI bytes, so device-specific mapping

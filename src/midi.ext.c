@@ -321,6 +321,20 @@ $R midiQ_midiQ_OutputD_send3G_local(midiQ_midiQ_Output self, $Cont C_cont,
     return $R_CONT(C_cont, B_None);
 }
 
+$R midiQ_midiQ_OutputD_send2G_local(midiQ_midiQ_Output self, $Cont C_cont,
+                                    int64_t status, int64_t data1) {
+    struct rtmidi_output_handle *handle =
+        (struct rtmidi_output_handle *)(intptr_t)self->_handle;
+    if (handle && handle->out) {
+        unsigned char msg[2] = {
+            (unsigned char)(status & 0xff),
+            (unsigned char)(data1 & 0x7f),
+        };
+        rtmidi_out_send_message(handle->out, msg, 2);
+    }
+    return $R_CONT(C_cont, B_None);
+}
+
 $R midiQ_midiQ_OutputD_closeG_local(midiQ_midiQ_Output self, $Cont C_cont) {
     struct rtmidi_output_handle *handle =
         (struct rtmidi_output_handle *)(intptr_t)self->_handle;
