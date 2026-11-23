@@ -23,17 +23,17 @@ static B_str port_name(RtMidiPtr device, unsigned int port) {
     int len = 0;
     rtmidi_get_port_name(device, port, NULL, &len);
     if (len <= 0) {
-        return to$str("<unnamed>");
+        return actStrFromCString("<unnamed>");
     }
     char *buf = malloc((size_t)len);
     if (!buf) {
-        return to$str("<unnamed>");
+        return actStrFromCString("<unnamed>");
     }
     if (rtmidi_get_port_name(device, port, buf, &len) < 0) {
         free(buf);
-        return to$str("<unnamed>");
+        return actStrFromCString("<unnamed>");
     }
-    B_str name = to$str(buf);
+    B_str name = actStrFromCStringCopy(buf);
     free(buf);
     return name;
 }
@@ -173,10 +173,10 @@ static void async_delivery(uv_async_t *async) {
     while (event) {
         struct rtmidi_event *next = event->next;
         if (event->type == RTMIDI_EVENT_PACKET) {
-            B_bytes raw = actBytesFromCStringLength((char *)event->data, event->length);
+            B_bytes raw = actBytesFromCStringLengthCopy((char *)event->data, event->length);
             handle->self->$class->_on_packet(handle->self, (int64_t)event->timestamp, raw);
         } else {
-            handle->self->$class->_on_error(handle->self, to$str(event->message));
+            handle->self->$class->_on_error(handle->self, actStrFromCStringCopy(event->message));
         }
 
         free(event->data);
@@ -210,7 +210,7 @@ $R midiQ_midiQ_InputD__openG_local(midiQ_midiQ_Input self, $Cont C_cont, int64_t
     RtMidiInPtr in = rtmidi_in_create_default();
     if (!in || !in->ok) {
         const char *msg = (in && in->msg) ? in->msg : "Unable to create RtMidi input";
-        self->$class->_on_error(self, to$str((char *)msg));
+        self->$class->_on_error(self, actStrFromCStringCopy(msg));
         if (in) rtmidi_in_free(in);
         return $R_CONT(C_cont, B_None);
     }
@@ -229,7 +229,7 @@ $R midiQ_midiQ_InputD__openG_local(midiQ_midiQ_Input self, $Cont C_cont, int64_t
     rtmidi_open_port(in, (unsigned int)source_ref, "acton midi input");
     if (!in->ok) {
         const char *msg = in->msg ? in->msg : "Unable to open RtMidi port";
-        self->$class->_on_error(self, to$str((char *)msg));
+        self->$class->_on_error(self, actStrFromCStringCopy(msg));
         rtmidi_in_cancel_callback(in);
         rtmidi_in_free(in);
         handle->in = NULL;
