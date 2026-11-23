@@ -86,25 +86,15 @@ def _destinations_raw() -> list[(int, str, int)]:
 
 def sources(cap: MidiCap) -> list[Endpoint]:
     """Return MIDI input sources."""
-    endpoints: list[Endpoint] = []
-    for index, name, ref in _sources_raw():
-        endpoints.append(Endpoint(index, name, ref))
-    return endpoints
+    return [Endpoint(index, name, ref) for index, name, ref in _sources_raw()]
 
 def destinations(cap: MidiCap) -> list[Endpoint]:
     """Return MIDI output destinations."""
-    endpoints: list[Endpoint] = []
-    for index, name, ref in _destinations_raw():
-        endpoints.append(Endpoint(index, name, ref))
-    return endpoints
+    return [Endpoint(index, name, ref) for index, name, ref in _destinations_raw()]
 
 def find_source(cap: MidiCap, name: str="DDJ-1000") -> Endpoint:
-    matches: list[Endpoint] = []
     wanted = name.lower()
-
-    for endpoint in sources(cap):
-        if endpoint.name.lower().find(wanted) >= 0:
-            matches.append(endpoint)
+    matches = [endpoint for endpoint in sources(cap) if endpoint.name.lower().find(wanted) >= 0]
 
     n_matches = len(matches)
     if n_matches > 0 and n_matches < 2:
@@ -114,12 +104,8 @@ def find_source(cap: MidiCap, name: str="DDJ-1000") -> Endpoint:
     raise ValueError(f"MIDI source selector is ambiguous: {name}")
 
 def find_destination(cap: MidiCap, name: str="Launchkey") -> Endpoint:
-    matches: list[Endpoint] = []
     wanted = name.lower()
-
-    for endpoint in destinations(cap):
-        if endpoint.name.lower().find(wanted) >= 0:
-            matches.append(endpoint)
+    matches = [endpoint for endpoint in destinations(cap) if endpoint.name.lower().find(wanted) >= 0]
 
     n_matches = len(matches)
     if n_matches > 0 and n_matches < 2:
@@ -199,7 +185,9 @@ actor Input(cap: MidiCap,
         _callback(self, Event(err=Exception(message)))
 
     selected = source if source is not None else find_source(cap, source_name)
-    _open(selected.ref)
+
+    proc def __startup__():
+        _open(selected.ref)
 
 actor Output(cap: MidiCap,
              on_open: ?action(Output, bool) -> None=None,
@@ -242,7 +230,9 @@ actor Output(cap: MidiCap,
         NotImplemented
 
     selected = dest if dest is not None else find_destination(cap, dest_name)
-    _open(selected.ref)
-    cb = on_open
-    if cb is not None:
-        cb(self, _handle != 0)
+
+    proc def __startup__():
+        _open(selected.ref)
+        cb = on_open
+        if cb is not None:
+            cb(self, _handle != 0)

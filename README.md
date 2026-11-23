@@ -30,6 +30,14 @@ statically.
 
 ## Build
 
+On macOS, use the native target so Zig finds the CoreMIDI frameworks in the installed Apple SDK:
+
+```sh
+acton build --target native
+```
+
+On Linux:
+
 ```sh
 acton build
 ```
@@ -99,8 +107,8 @@ out/bin/vu_demo 0
 ## API Sketch
 
 ```acton
-import midi
-import ddj1000
+import midi.midi as midi
+import midi.ddj1000 as ddj1000
 
 actor main(env):
     cap = midi.MidiCap(env.cap)
@@ -122,9 +130,11 @@ running status, and the receiver reads it as a second message.
 
 ```acton
     out = midi.Output(cap, dest_name="FLUID")
-    out.program_change(0, 89)   # GM "Pad 2 (warm)" on channel 1
-    out.note_on(0, 60, 64)      # middle C
-    out.note_on(0, 60, 0)       # velocity 0 == note-off
+
+    proc def __startup__():
+        out.program_change(0, 89)   # GM "Pad 2 (warm)" on channel 1
+        out.note_on(0, 60, 64)      # middle C
+        out.note_on(0, 60, 0)       # velocity 0 == note-off
 ```
 
 `midi.Message.raw` keeps the original MIDI bytes, so device-specific mapping
