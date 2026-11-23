@@ -50,15 +50,7 @@ pub fn build(b: *std.Build) void {
 
     switch (os_tag) {
         .macos => {
-            // A consumer that drives zig with an explicit `-target
-            // aarch64-macos-none` (Acton's build) turns off native SDK
-            // auto-detection, so locate the SDK ourselves and point the compiler
-            // at it. This is only needed to *compile* RtMidi.cpp's CoreMIDI
-            // backend, which includes <CoreServices/CoreServices.h> (framework
-            // headers) and transitively <libDER/DERItem.h> (a plain SDK header).
-            // No sysroot is needed: a static archive does not resolve the
-            // frameworks' transitive deps, so -syslibroot only matters at the
-            // consumer's final link (Acton's build.zig template handles it).
+            // RtMidi.cpp includes framework headers and regular SDK headers.
             if (std.zig.system.darwin.getSdk(b.allocator, b.graph.io, &target.result)) |sdk| {
                 lib.root_module.addSystemFrameworkPath(.{
                     .cwd_relative = b.pathJoin(&.{ sdk, "System/Library/Frameworks" }),
@@ -67,9 +59,8 @@ pub fn build(b: *std.Build) void {
                     .cwd_relative = b.pathJoin(&.{ sdk, "usr/include" }),
                 });
             }
-            // linkFramework records the framework *names*; zig propagates those
-            // across the link graph. The search path does NOT propagate, so
-            // resolving these at the final link is the consumer's job.
+            // Framework names propagate to consumers. The native macOS target
+            // lets Zig find the framework search path at the final link.
             lib.root_module.linkFramework("CoreServices", .{});
             lib.root_module.linkFramework("CoreAudio", .{});
             lib.root_module.linkFramework("CoreMIDI", .{});

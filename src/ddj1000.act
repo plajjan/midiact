@@ -11,7 +11,6 @@ actor Controller(cap: midi.MidiCap,
     This currently forwards decoded MIDI messages. Device-specific named
     controls can be layered here once we have captured the DDJ-1000's messages.
     """
-    var _input: ?midi.Input = None
     var _callback = on_event
 
     def _on_event(input: midi.Input, event: midi.Event) -> None:
@@ -20,9 +19,7 @@ actor Controller(cap: midi.MidiCap,
     action def set_callback(handler: action(Controller, midi.Event) -> None) -> None:
         _callback = handler
 
-    action def close() -> None:
-        input = _input
-        if input is not None:
-            input.close()
-
     _input = midi.Input(cap, _on_event, source_name=DEFAULT_SOURCE)
+
+    action def close() -> None:
+        _input.close()

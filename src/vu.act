@@ -2,7 +2,7 @@
 
 import midi
 import ddj1000
-import term
+import std.term as term
 import vumeter
 
 class Selector:
@@ -151,7 +151,6 @@ def message_label(message: midi.Message) -> str:
 
 actor main(env):
     var selector = Selector()
-    var listen_seconds = 0.0
     var level = 0
     var peak = 0
     var value = 0
@@ -159,30 +158,6 @@ actor main(env):
     var status = "Move one supported DDJ-1000 control to learn it."
     var last_message = "-"
     var controller: ?ddj1000.Controller = None
-
-    prog = env.argv[0] if len(env.argv) > 0 else "vu"
-
-    try:
-        if len(env.argv) > 1:
-            first = env.argv[1]
-            if first == "-h" or first == "--help":
-                print(usage(prog), end="")
-                env.exit(0)
-            elif first.find(":") >= 0 or first.lower() == "learn":
-                selector = parse_selector(first)
-                if len(env.argv) > 2:
-                    listen_seconds = float(env.argv[2])
-            else:
-                listen_seconds = float(first)
-                if len(env.argv) > 2:
-                    raise ValueError("SECONDS-only mode accepts one argument")
-        if len(env.argv) > 3:
-            raise ValueError("Too many arguments")
-    except ValueError as exc:
-        print(str(exc), err=True)
-        print("", err=True)
-        print(usage(prog), err=True, end="")
-        env.exit(2)
 
     def draw() -> None:
         selector_text = str(selector)
@@ -201,13 +176,13 @@ actor main(env):
             + f"{status}\n"
             + f"{last_message}\n"
         )
-        env.stdout_write(screen)
+        env.stdio.out(screen)
 
     def finish(code: int) -> None:
         ctl = controller
         if ctl is not None:
             ctl.close()
-        env.stdout_write(term.normal + "\n")
+        env.stdio.out(term.normal + "\n")
         env.exit(code)
 
     def on_key(text: str) -> None:
@@ -243,17 +218,44 @@ actor main(env):
                 status = f"input {selector}"
                 draw()
 
-    env.set_stdin(canonical=False)
-    env.set_stdin(echo=False)
-    env.stdin_install(on_key)
+    proc def __startup__():
+        listen_seconds = 0.0
+        prog = env.argv[0] if len(env.argv) > 0 else "vu"
 
-    draw()
-    cap = midi.MidiCap(env.cap)
-    try:
-        controller = ddj1000.Controller(cap, on_event)
-    except Exception as exc:
-        status = f"Could not open DDJ-1000 MIDI source: {exc}"
+        try:
+            if len(env.argv) > 1:
+                first = env.argv[1]
+                if first == "-h" or first == "--help":
+                    print(usage(prog), end="")
+                    env.exit(0)
+                    return
+                elif first.find(":") >= 0 or first.lower() == "learn":
+                    selector = parse_selector(first)
+                    if len(env.argv) > 2:
+                        listen_seconds = float(env.argv[2])
+                else:
+                    listen_seconds = float(first)
+                    if len(env.argv) > 2:
+                        raise ValueError("SECONDS-only mode accepts one argument")
+            if len(env.argv) > 3:
+                raise ValueError("Too many arguments")
+        except ValueError as exc:
+            print(str(exc), err=True)
+            print("", err=True)
+            print(usage(prog), err=True, end="")
+            env.exit(2)
+            return
+
+        env.stdio.set_stdin(canonical=False, echo=False)
+        env.stdio.stdin_install(on_key)
+
         draw()
+        cap = midi.MidiCap(env.cap)
+        try:
+            controller = ddj1000.Controller(cap, on_event)
+        except Exception as exc:
+            status = f"Could not open DDJ-1000 MIDI source: {exc}"
+            draw()
 
-    if listen_seconds > 0.0:
-        after listen_seconds: finish(0)
+        if listen_seconds > 0.0:
+            after listen_seconds: finish(0)

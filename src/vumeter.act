@@ -1,6 +1,6 @@
 """Shared terminal rendering helpers for VU meters."""
 
-import term
+import std.term as term
 
 BRAILLE_CELLS = 40
 DOTS_PER_CELL = 8
